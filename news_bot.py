@@ -4,15 +4,13 @@ import os
 import time
 from datetime import datetime
 
-# --- НАСТРОЙКИ: ВСТАВЬ СВОИ ДАННЫЕ ---
-BOT_TOKEN = "ВСТАВЬ_ТОКЕН_ОТ_BOTFATHER"
-CHANNEL_ID = "@ТВОЙ_КАНАЛ_В_TELEGRAM"
-GIGACHAT_KEY = "MDFhMGI1MTgtMzBjMC03MzY5LTlmMjQtNGNmOWQ3MDVjYjQ0OjgxNmNhMDQ5LTQwNzYtNGViYS04NmU1LTQzOGQ5ZjMxZTZmZA=="
-# ------------------------------------
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
+GIGACHAT_KEY = os.environ.get("GIGACHAT_KEY", "")
 
 SEEN_FILE = "seen_posts.txt"
 TITLE_FILE = "seen_titles.txt"
-CHECK_INTERVAL = 600  # 10 минут в секундах
+CHECK_INTERVAL = 600
 
 def load_seen():
     if not os.path.exists(SEEN_FILE):
@@ -49,16 +47,17 @@ def get_gigachat_token():
     try:
         r = requests.post(url, headers=headers, data=payload, timeout=10)
         if r.status_code != 200:
-            print(f"[ERROR] Не удалось получить токен GigaChat: {r.status_code} {r.text}")
+            print(f"[ERROR] Токен GigaChat: {r.status_code} {r.text}")
             return None
         return r.json()["access_token"]
     except Exception as e:
-        print(f"[ERROR] Ошибка при запросе токена: {e}")
+        print(f"[ERROR] Ошибка токена: {e}")
         return None
 
 def rewrite_with_gigachat(headline, summary):
     prompt = (
-        "Перефразируй новость простым языком, как для Дзена: без кликбейта, без восклицаний, без «сенсаций». "
+        "Перефразируй новость простым языком, как для Дзена: "
+        "без кликбейта, без восклицаний, без «сенсаций». "
         "Сделай 2–3 абзаца. Не добавляй своё мнение. "
         f"Заголовок: {headline}\n"
         f"Краткое содержание: {summary}"
@@ -66,7 +65,6 @@ def rewrite_with_gigachat(headline, summary):
     token = get_gigachat_token()
     if not token:
         return None
-
     url = "https://gigachat.devices.sberbank.ru/api/v2/chat/completions"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -81,12 +79,11 @@ def rewrite_with_gigachat(headline, summary):
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=30)
         if r.status_code != 200:
-            print(f"[ERROR] GigaChat error: {r.status_code} {r.text}")
+            print(f"[ERROR] GigaChat: {r.status_code} {r.text}")
             return None
-        text = r.json()["choices"][0]["message"]["content"]
-        return text
+        return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[ERROR] Parse error: {e}")
+        print(f"[ERROR] Parse: {e}")
         return None
 
 def send_to_telegram(text):
@@ -103,12 +100,10 @@ def fetch_news():
     seen_links = load_seen()
     seen_titles = load_titles()
     new_posts = []
-
     RSS_URLS = [
-        "ria.ru/export/rss2/politics/index.xml",
-        "rbc.ru/rss/politics"
+        "https://ria.ru/export/rss2/politics/index.xml",
+        "https://rbc.ru/rss/politics"
     ]
-
     for url in RSS_URLS:
         feed = feedparser.parse(url)
         for entry in feed.entries[:5]:
@@ -116,17 +111,13 @@ def fetch_news():
             title = entry.get("title", "")
             if not title or not link:
                 continue
-
             if link in seen_links:
                 continue
-
             norm_title = normalize_title(title)
             if norm_title in seen_titles:
-                print(f"[SKIP] Пропущен дубль по заголовку: {title}")
+                print(f"[SKIP] Дубль: {title}")
                 continue
-
             summary = entry.get("summary", "") or entry.get("description", "")
-
             rewritten = rewrite_with_gigachat(title, summary)
             if rewritten:
                 post_text = f"<b>{title}</b>\n\n{rewritten}\n\n🔗 [Читать далее]({link})"
@@ -134,7 +125,6 @@ def fetch_news():
                 seen_links.add(link)
                 seen_titles.add(norm_title)
                 break
-
     save_seen(seen_links)
     save_titles(seen_titles)
     return new_posts
@@ -148,9 +138,9 @@ def main():
             for text, link, _ in posts:
                 ok = send_to_telegram(text)
                 status = "OK" if ok else "ERROR"
-                print(f"[{status}] Пост опубликован: {link[:60]}...")
+                print(f"[{status}] {link[:60]}...")
         except Exception as e:
-            print(f"[ERROR] Ошибка в главном цикле: {e}")
+            print(f"[ERROR] {e}")
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
