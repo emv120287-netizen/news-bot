@@ -2,8 +2,24 @@ import requests
 import feedparser
 import os
 import time
+import threading
 from datetime import datetime
+from flask import Flask
 
+# Мини-сервер, чтобы Render не усыплял бот
+app = Flask(__name__)
+
+@app.route("/")
+def health():
+    return "OK"
+
+def run_web():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+# Запускаем веб-сервер в отдельном потоке
+threading.Thread(target=run_web, daemon=True).start()
+
+# --- Переменные окружения ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
 GIGACHAT_KEY = os.environ.get("GIGACHAT_KEY", "")
@@ -115,12 +131,11 @@ def fetch_news():
                 continue
             norm_title = normalize_title(title)
             if norm_title in seen_titles:
-                print(f"[SKIP] Дубль: {title}")
                 continue
             summary = entry.get("summary", "") or entry.get("description", "")
             rewritten = rewrite_with_gigachat(title, summary)
             if rewritten:
-                post_text = f"<b>{title}</b>\n\n{rewritten}\n\n🔗 [Читать далее]({link})"
+                post_text = f"<b>{title}</b>\n\n{rewritten}\n\n🔗 {link}"
                 new_posts.append((post_text, link, norm_title))
                 seen_links.add(link)
                 seen_titles.add(norm_title)
